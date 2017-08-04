@@ -44,7 +44,9 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 
-
+#include <move_base_msgs/MoveBaseAction.h>
+#include <actionlib/client/simple_action_client.h>
+typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseClient;
 using namespace teb_local_planner; // it is ok here to import everything for testing purposes
 
 // ============= Global Variables ================
@@ -66,8 +68,10 @@ void CB_reconfigure(TebLocalPlannerReconfigureConfig& reconfig, uint32_t level);
 void CB_customObstacle(const teb_local_planner::ObstacleMsg::ConstPtr& obst_msg);
 void CreateInteractiveMarker(const double& init_x, const double& init_y, unsigned int id, std::string frame, interactive_markers::InteractiveMarkerServer* marker_server, interactive_markers::InteractiveMarkerServer::FeedbackCallback feedback_cb);
 void CB_obstacle_marker(const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback);
-void CB_clicked_points(const geometry_msgs::PointStampedConstPtr& point_msg);
+//void CB_clicked_points(const geometry_msgs::PointStampedConstPtr& point_msg);
 
+//ros-autom callback
+void rosautom_callback(const geometry_msgs::PointStampedConstPtr& clickedpnt) ;
 
 // =============== Main function =================
 int main( int argc, char** argv )
@@ -91,7 +95,8 @@ int main( int argc, char** argv )
   custom_obst_sub = n.subscribe("obstacles", 1, CB_customObstacle);
   
   // setup callback for clicked points (in rviz) that are considered as via-points
-  clicked_points_sub = n.subscribe("/clicked_point", 5, CB_clicked_points);
+ // clicked_points_sub = n.subscribe("/clicked_point", 5, CB_clicked_points);
+  clicked_points_sub = n.subscribe("/clicked_point", 5, rosautom_callback);
   
   // interactive marker server for simulated dynamic obstacles
   interactive_markers::InteractiveMarkerServer marker_server("marker_obstacles");
@@ -258,12 +263,38 @@ void CB_customObstacle(const teb_local_planner::ObstacleMsg::ConstPtr& obst_msg)
 }
 
 
+void rosautom_callback(const geometry_msgs::PointStampedConstPtr& clickedpnt) {
+	
+  static MoveBaseClient ac("move_base", true);
+  static move_base_msgs::MoveBaseGoal customgoal;
+	
+  customgoal.target_pose.header.frame_id = "map";
+  customgoal.target_pose.header.stamp = ros::Time::now();
+  customgoal.target_pose.pose.position.x = clickedpnt->point.x; //i need arrows since clickedpnt is an address of class.not a class
+  customgoal.target_pose.pose.position.y =  clickedpnt->point.y;
+  customgoal.target_pose.pose.position.z =   clickedpnt->point.z;
+  customgoal.target_pose.pose.orientation.x = 0.0;
+  customgoal.target_pose.pose.orientation.y = 0.0;
+  customgoal.target_pose.pose.orientation.z = 0.0; // a complete circle is 3.14
+  customgoal.target_pose.pose.orientation.w = 1.0;
+
+  ac.sendGoal(customgoal);
+  ac.waitForResult();
+	
+	
+	
+}
+/*
 void CB_clicked_points(const geometry_msgs::PointStampedConstPtr& point_msg)
 {
   // we assume for simplicity that the fixed frame is already the map/planning frame
   // consider clicked points as via-points
+
+
+  
   via_points.push_back( Eigen::Vector2d(point_msg->point.x, point_msg->point.y) );
   ROS_INFO_STREAM("Via-point (" << point_msg->point.x << "," << point_msg->point.y << ") added.");
   if (config.optim.weight_viapoint<=0)
     ROS_WARN("Note, via-points are deactivated, since 'weight_via_point' <= 0");
 }
+*/
